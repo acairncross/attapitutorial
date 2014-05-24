@@ -1,79 +1,413 @@
-<!DOCTYPE html>
+<!doctype html>
+<meta charset="UTF-8">
+
 <html>
+<head>
+  <link rel="stylesheet" type="text/css" href="github.css" />
+  <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+  <style>
+    body {
+      font-family: "Open Sans";
+      background-image: url("logo.png");
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      background-size: contain;
+      background-position: right;
+    }
 
-  <head>
-    <meta charset='utf-8' />
-    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
-    <meta name="description" content="Attapitutorial : attapitutorial" />
+    #body-container {
+      width: 800px;
+      margin: 0 auto;
+      border: 1px solid #444;
+      background-color: rgba(200,200,230,0.5);
+      padding: 50px;
+    }
+    
+    p {
+      text-align: justify;
+    }
 
-    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+    ul {
+      list-style-image: url("logo_bullet.png");
+      line-height: 200%;
+    }
 
-    <title>Attapitutorial</title>
-  </head>
+    a {
+      text-decoration: none;
+      border-bottom: 1px dashed black;
+    }
 
-  <body>
+    a:hover {
+      border-bottom: 1px solid black;
+    }
 
-    <!-- HEADER -->
-    <div id="header_wrap" class="outer">
-        <header class="inner">
-          <a id="forkme_banner" href="https://github.com/ackien/attapitutorial">View on GitHub</a>
+    h2 {
+      border-bottom: 1px dashed #99f;
+    }
+  </style>
+</head>
 
-          <h1 id="project_title">Attapitutorial</h1>
-          <h2 id="project_tagline">attapitutorial</h2>
+<body>
+  <div id="body-container">
+    <h1>Learning to use the AT&amp;T Speech-to-Text API<br />
+    (And making an amazing game at the same time)</h1>
 
-            <section id="downloads">
-              <a class="zip_download_link" href="https://github.com/ackien/attapitutorial/zipball/master">Download this project as a .zip file</a>
-              <a class="tar_download_link" href="https://github.com/ackien/attapitutorial/tarball/master">Download this project as a tar.gz file</a>
-            </section>
-        </header>
-    </div>
+    <p>
+      <a href="https://www.att.com/">AT&amp;T</a> offers some
+      <a href="https://developer.att.com/apis">brilliant APIs</a> that you can
+      use either for free (with limited capabilities) or at a very reasonable 
+      price. It can be a little tricky to get started with them though, so
+      we're going to get you up and running with a fantastic game that makes
+      use of the <a href="https://developer.att.com/apis/speech">Speech API</a>
+      (in particular, the Speech-to-Text functionality) of it.
+    </p>
 
-    <!-- MAIN CONTENT -->
-    <div id="main_content_wrap" class="outer">
-      <section id="main_content" class="inner">
-        <h3>
-<a name="welcome-to-github-pages" class="anchor" href="#welcome-to-github-pages"><span class="octicon octicon-link"></span></a>Welcome to GitHub Pages.</h3>
+    <p>
+      If you want to get straight to the fun, you can download the source
+      files: <a href="">main.py</a>, <a href="">recordaudio.py</a>.
+    </p>
 
-<p>This automatic page generator is the easiest way to create beautiful pages for all of your projects. Author your page content here using GitHub Flavored Markdown, select a template crafted by a designer, and publish. After your page is generated, you can check out the new branch:</p>
+    <h2>Pre-requisites</h2>
+    <p>
+      You're going to need to get a few things ready before you can get
+      things to work, so follow the links below to download them:
+      <ul>
+        <li><a href="https://www.python.org/">Python</a>
+        <li><a href="http://people.csail.mit.edu/hubert/pyaudio/">PyAudio</a>
+        <li><a href="http://pycurl.sourceforge.net/">PycURL</a>
+      </ul>
+    </p>
+    <p>
+      Also make sure you've signed up for the AT&amp;T API on their website.
+      You'll need a client_id and a client_secret.
+    </p>
 
-<pre><code>$ cd your_repo_root/repo_name
-$ git fetch origin
-$ git checkout gh-pages
+    <h2>Rules of the game</h2>
+    <p>
+      The game we're going to make is going to be a 2 player game called
+      Glarble Flarble. The rules are as follows: 
+    </p>
+    <p>
+      Player 1 makes some sound, which gets recorded by the computer. Then
+      Player 2 tries to make the same sound. At the end, both players get to
+      see what the AT&amp;T Speech-to-Text API thought they said, and
+      hilarity ensues. (There's no winner, really, although you can choose
+      a winner if you want to.)
+    </p>
+
+    <h2>Setting up the voice recording</h2>
+    <p>
+      Let's create a Python script that deals with recording your voice.
+      Open up a file (maybe call it <code>recordaudio.py</code>). We'll
+      need to import some things at the beginning of the script:
+    </p>
+<pre><code data-language="python">from sys import byteorder
+from array import array
+from struct import pack
+
+import pyaudio
+import wave
+</code></pre>
+    <p>
+      We also need to add some code to make sure we end up with the right
+      file format at the end, so we'll set up some constants to help us.
+      AT&amp;T's API accepts (among other formats) 16-bit mono WAV files,
+      sampled at 8KHz (you don't need to know what that means). The
+      <code>RATE</code> and <code>FORMAT</code> deals with this.
+      <code>THRESHOLD</code> is used to detect silence, so if there is a 
+      large amount of background noise, you might need to increase this
+      further.
+    </p>
+<pre><code data-language="python">THRESHOLD = 5000
+CHUNK_SIZE = 1024
+FORMAT = pyaudio.paInt16
+RATE = 8000
+</code></pre>
+    <p>
+      Apart from recording, we want our script to detect <em>when</em> to
+      record, as well. We don't want it to record when there's lots of
+      background noise, so let's create a function which detects silence.
+    </p>
+<pre><code data-language="python">def is_silent(snd_data):
+    "Returns 'True' if below the 'silent' threshold"
+    return max(snd_data) < THRESHOLD
+</code></pre>
+    <p>
+      Most of our script is going to be in a function called
+      <code>record</code>, but we'll make some helper functions called
+      <code>normalize</code>, <code>trim</code> and <code>add_silence</code>.
+    </p>
+<pre><code data-language="python">def normalize(snd_data):
+    "Average the volume out"
+    MAXIMUM = 16384
+    times = float(MAXIMUM)/max(abs(i) for i in snd_data)
+
+    r = array('h')
+    for i in snd_data:
+        r.append(int(i*times))
+    return r
+
+def trim(snd_data):
+    "Trim the blank spots at the start and end"
+    def _trim(snd_data):
+        snd_started = False
+        r = array('h')
+
+        for i in snd_data:
+            if not snd_started and abs(i)>THRESHOLD:
+                snd_started = True
+                r.append(i)
+
+            elif snd_started:
+                r.append(i)
+        return r
+
+    # Trim to the left
+    snd_data = _trim(snd_data)
+
+    # Trim to the right
+    snd_data.reverse()
+    snd_data = _trim(snd_data)
+    snd_data.reverse()
+    return snd_data
+
+def add_silence(snd_data, seconds):
+    "Add silence to the start and end of 'snd_data' of length 'seconds' (float)"
+    r = array('h', [0 for i in xrange(int(seconds*RATE))])
+    r.extend(snd_data)
+    r.extend([0 for i in xrange(int(seconds*RATE))])
+    return r
+</code></pre>
+    <p>
+      Finally, the meat of the script:
+    </p>
+<pre><code data-language="python">def record():
+    """
+    Record a word or words from the microphone and 
+    return the data as an array of signed shorts.
+
+    Normalizes the audio, trims silence from the 
+    start and end, and pads with 0.5 seconds of 
+    blank sound to make sure VLC et al can play 
+    it without getting chopped off.
+    """
+    p = pyaudio.PyAudio()
+    stream = p.open(format=FORMAT, channels=1, rate=RATE,
+        input=True, output=True,
+        frames_per_buffer=CHUNK_SIZE)
+
+    num_silent = 0
+    snd_started = False
+
+    r = array('h')
+
+    while 1:
+        # little endian, signed short
+        snd_data = array('h', stream.read(CHUNK_SIZE))
+        if byteorder == 'big':
+            snd_data.byteswap()
+        r.extend(snd_data)
+
+        silent = is_silent(snd_data)
+
+        if silent and snd_started:
+            num_silent += 1
+        elif not silent and not snd_started:
+            snd_started = True
+
+        if snd_started and num_silent > 30:
+            break
+
+    sample_width = p.get_sample_size(FORMAT)
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+
+    r = normalize(r)
+    r = trim(r)
+    r = add_silence(r, 0.5)
+    return sample_width, r
+
+def record_to_file(path):
+    "Records from the microphone and outputs the resulting data to 'path'"
+    sample_width, data = record()
+    data = pack('<' + ('h'*len(data)), *data)
+
+    wf = wave.open(path, 'wb')
+    wf.setnchannels(1)
+    wf.setsampwidth(sample_width)
+    wf.setframerate(RATE)
+    wf.writeframes(data)
+    wf.close()
+</code></pre>
+    <p>
+      Slap all of that together and you have yourself a
+      <code>recordaudio.py</code> module!
+    </p>
+
+    <h2>Setting up the interface</h2>
+    <p>
+      Now that we've got a way to record audio files, let's take a look at the AT&T
+      APIs. We'll be using pyCurl to create the appropriate HTTP requests.
+    </p>
+<pre><code data-language="python">#create pycurl object
+c = pycurl.Curl()
+</code></pre>
+    <p>
+      First we need to get the access tokens. To do this, we first need to create a
+      <code>cStringIO.StringIO</code> object. We use this object as a way to get the contents
+      of the response that AT&T sends back once we dispatch the HTTP request. We also set a couple
+      other pertinent settings.
+    </p>
+<pre><code data-language="python">import pycurl
+import cStringIO
+import json
+#buffer to store the responses in
+buf = cStringIO.StringIO()
+
+#settings
+client_id       = {CLIENT_ID}
+client_secret   = {CLIENT_SECRET}
+post_field_string = 
+  "client_id=" + client_id +
+  "&client_secret=" + client_secret +
+  "&grant_type=client_credentials&scope=SPEECH"
+</pre></code>
+    <p>
+      Then let's set the options as follows. Note that by setting the <code>c.POSTFIELDS</code>
+      option, we automatically convert the request to a POST request. Then we
+      dispatch the request to AT&T.
+    </p>
+<pre><code data-language="python">c.setopt(c.URL, "https://api.att.com/oauth/token")
+c.setopt(c.HTTPHEADER, [
+  'Accept: application/json', 
+  'Content-Type: application/x-www-form-urlencoded'
+])
+c.setopt(c.POSTFIELDS, post_field_string)
+c.setopt(c.WRITEFUNCTION, buf.write)
+c.perform()
+</pre></code>
+    <p>
+      Then we use the json module to parse the response that AT&T returns. Then we
+      close the <code>cStringIO.StringIO</code> object.
+    </p>
+<pre><code data-language="python">jsonobj = json.loads(buf.getvalue()) 
+access_token = jsonobj['access_token']
+buf.close()
+</pre></code>
+    <p>
+      Okay, now we have the access token! We can use this token to ask AT&T to
+      accept audio files and to return to us the textual representation of those
+      files. Let's define this as another function
+      <code>ATI_Parse(filename)</code>, where filename is the string that
+      represents the location of the audio file.
+    </p>
+    <p>
+      We create another <code>cStringIO.StringIO</code> object, reset the pyCurl object. Then we
+      open the audio file. Note that we use the option "rb" when we create the file
+      object. This is because we want to read the object as a binary file.
+    </p>
+<pre><code data-language="python">#create a new buffer
+buf = cStringIO.StringIO()
+c.reset()
+
+#open the .wav file and read it in binary form
+f_open = open(filename,"rb")
+sample_file = f_open.read()
+</pre></code>
+    <p>
+      We set the options for the request as follows, and then we dispatch the
+      request. Like before, we use the json module to parse the response, and then
+      return the list of words that AT&T responded with.
+    </p>
+<pre><code data-language="python">#set the options for the pyCurl request
+c.setopt(c.URL, "https://api.att.com/rest/1/SpeechToText")
+c.setopt(c.HTTPHEADER, [
+  ("Authorization: Bearer " + access_token).encode('ascii','ignore'),
+  "Content-Type: audio/wav",
+  "Accept: application/json", 
+  "X-SpeechContext: BusinessSearch"])
+c.setopt(c.POSTFIELDS, sample_file) #the data file goes in the post field
+c.setopt(c.WRITEFUNCTION, buf.write)
+c.perform()
+
+result = buf.getvalue()
+jsonobj = json.loads(buf.getvalue())
+return jsonobj['Recognition']["NBest"][0]["Words"]
+</pre></code>
+    <p>
+      Now that we have the general framework down, let's create the game Glarble Flarble that uses the framework we've just set up.
+    </p>
+
+    <p>
+      To implement this game, we're going to use the built-in GUI toolkit - Tkinter.
+    </p>
+
+    <p>
+      Create a subclass of <code>Tkinter.Frame</code>, that has a button and a textbox to output updates. The function that we call when we click on the button will spawn a thread that will utilize AT&T's APIs as well as PyAudio to record sounds and send them to AT&T for a textual representation of the sound. We need to spawn a new thread to handle these requests because waiting on HTTP requests on the main thread would cause the program to lock up.
+    </p>
+
+    <p>
+      As this is just a short tutorial, we use the thread module (not recommended!).
+    </p>
+
+    <p>
+      In the playRound function we use the <code>record_to_file(filename)</code> function to record the two sounds to two differnet files. Then we use the AT&T API's to send those sounds to AT&T. We then output the result to the textbox. Below is the full Tkinter class.
+    </p>
+<pre><code data-language="python">import recordaudio
+import thread
+from Tkinter import *
+class Demo(Frame):
+    def __init__(self,root, **options):
+        Frame.__init__(self,root,**options)
+        startgame = Button(self, text = "Start!", width= 10, command = self.spawnPlayRound)
+        startgame.pack()
+
+        self.resultText = Text(self,height=24,width=60)
+        self.resultText.pack(side=TOP)
+
+    def spawnPlayRound(self):
+        thread.start_new(Demo.playRound, (self, ))
+
+    def playRound(self):
+        self.resultText.insert(END, "Say something!\n")
+        recordaudio.record_to_file('file1.wav')
+        self.resultText.insert(END, "Try and imitate the sound!\n")
+        recordaudio.record_to_file('file2.wav')
+
+        self.resultText.insert(END, "Okay processing sound 1...\n")
+        result1 = ATT_Parse("file1.wav")
+        self.resultText.insert(
+          END, "AT&T thought the 1st person said: " + " ".join(result1) + "\n")
+        self.resultText.insert(END, "Okay processing sound 2...\n")
+        result2 = ATT_Parse("file2.wav")
+        self.resultText.insert(
+          END, "AT&T thought the 2nd person said: " + " ".join(result2) + "\n")
 </code></pre>
 
-<p>If you're using the GitHub for Mac, simply sync your repository and you'll see the new branch.</p>
+    <p>
+      Now just start the script up, get some friends, and shout some nonsense at the computer!
+    </p>
 
-<h3>
-<a name="designer-templates" class="anchor" href="#designer-templates"><span class="octicon octicon-link"></span></a>Designer Templates</h3>
-
-<p>We've crafted some handsome templates for you to use. Go ahead and continue to layouts to browse through them. You can easily go back to edit your page before publishing. After publishing your page, you can revisit the page generator and switch to another theme. Your Page content will be preserved if it remained markdown format.</p>
-
-<h3>
-<a name="rather-drive-stick" class="anchor" href="#rather-drive-stick"><span class="octicon octicon-link"></span></a>Rather Drive Stick?</h3>
-
-<p>If you prefer to not use the automatic generator, push a branch named <code>gh-pages</code> to your repository to create a page manually. In addition to supporting regular HTML content, GitHub Pages support Jekyll, a simple, blog aware static site generator written by our own Tom Preston-Werner. Jekyll makes it easy to create site-wide headers and footers without having to copy them across every page. It also offers intelligent blog support and other advanced templating features.</p>
-
-<h3>
-<a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h3>
-
-<p>You can <a href="https://github.com/blog/821" class="user-mention">@mention</a> a GitHub username to generate a link to their profile. The resulting <code>&lt;a&gt;</code> element will link to the contributor's GitHub Profile. For example: In 2007, Chris Wanstrath (<a href="https://github.com/defunkt" class="user-mention">@defunkt</a>), PJ Hyett (<a href="https://github.com/pjhyett" class="user-mention">@pjhyett</a>), and Tom Preston-Werner (<a href="https://github.com/mojombo" class="user-mention">@mojombo</a>) founded GitHub.</p>
-
-<h3>
-<a name="support-or-contact" class="anchor" href="#support-or-contact"><span class="octicon octicon-link"></span></a>Support or Contact</h3>
-
-<p>Having trouble with Pages? Check out the documentation at <a href="http://help.github.com/pages">http://help.github.com/pages</a> or contact <a href="mailto:support@github.com">support@github.com</a> and we’ll help you sort it out.</p>
-      </section>
-    </div>
-
-    <!-- FOOTER  -->
-    <div id="footer_wrap" class="outer">
-      <footer class="inner">
-        <p class="copyright">Attapitutorial maintained by <a href="https://github.com/ackien">ackien</a></p>
-        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
-      </footer>
-    </div>
-
-    
-
-  </body>
+    <p>
+      The source files for the complete project can be downloaded below:
+    </p>
+    <p>
+      <a href="">main.py</a>, <a href="">recordaudio.py</a>.
+    </p>
+  </div>
+  <script>
+    /* Rainbow v1.2 rainbowco.de | included languages: generic, python */
+    window.Rainbow=function(){function A(a){var b=a.getAttribute("data-language")||a.parentNode.getAttribute("data-language");if(!b){var c=/\blang(?:uage)?-(\w+)/;(a=a.className.match(c)||a.parentNode.className.match(c))&&(b=a[1])}return b}function B(a,b){for(var c in f[d]){c=parseInt(c,10);if(a==c&&b==f[d][c]?0:a<=c&&b>=f[d][c])delete f[d][c],delete j[d][c];if(a>=c&&a<f[d][c]||b>c&&b<f[d][c])return!0}return!1}function q(a,b){return'<span class="'+a.replace(/\./g," ")+(l?" "+l:"")+'">'+b+"</span>"}function r(a,
+    b,c,i){if("undefined"===typeof a||null===a)i();else{var e=a.exec(c);if(e){++s;!b.name&&"string"==typeof b.matches[0]&&(b.name=b.matches[0],delete b.matches[0]);var k=e[0],g=e.index,t=e[0].length+g,h=function(){function e(){r(a,b,c,i)}s%100>0?e():setTimeout(e,0)};if(B(g,t))h();else{var m=u(b.matches),l=function(a,c,i){if(a>=c.length)i(k);else{var d=e[c[a]];if(d){var g=b.matches[c[a]],f=g.language,h=g.name&&g.matches?g.matches:g,j=function(b,d,g){var f;f=0;var h;for(h=1;h<c[a];++h)e[h]&&(f=f+e[h].length);
+    d=g?q(g,d):d;k=k.substr(0,f)+k.substr(f).replace(b,d);l(++a,c,i)};f?n(d,f,function(a){j(d,a)}):typeof g==="string"?j(d,d,g):v(d,h.length?h:[h],function(a){j(d,a,g.matches?g.name:0)})}else l(++a,c,i)}};l(0,m,function(a){b.name&&(a=q(b.name,a));if(!j[d]){j[d]={};f[d]={}}j[d][g]={replace:e[0],"with":a};f[d][g]=t;h()})}}else i()}}function u(a){var b=[],c;for(c in a)a.hasOwnProperty(c)&&b.push(c);return b.sort(function(a,c){return c-a})}function v(a,b,c){function i(b,k){k<b.length?r(b[k].pattern,b[k],
+    a,function(){i(b,++k)}):C(a,function(a){delete j[d];delete f[d];--d;c(a)})}++d;i(b,0)}function C(a,b){function c(a,b,i,f){if(i<b.length){++w;var h=b[i],l=j[d][h],a=a.substr(0,h)+a.substr(h).replace(l.replace,l["with"]),h=function(){c(a,b,++i,f)};0<w%250?h():setTimeout(h,0)}else f(a)}var i=u(j[d]);c(a,i,0,b)}function n(a,b,c){var d=m[b]||[],e=m[x]||[],b=y[b]?d:d.concat(e);v(a.replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/&(?![\w\#]+;)/g,"&amp;"),b,c)}function o(a,b,c){if(b<a.length){var d=a[b],
+    e=A(d);return!(-1<(" "+d.className+" ").indexOf(" rainbow "))&&e?(e=e.toLowerCase(),d.className+=d.className?" rainbow":"rainbow",n(d.innerHTML,e,function(k){d.innerHTML=k;j={};f={};p&&p(d,e);setTimeout(function(){o(a,++b,c)},0)})):o(a,++b,c)}c&&c()}function z(a,b){var a=a&&"function"==typeof a.getElementsByTagName?a:document,c=a.getElementsByTagName("pre"),d=a.getElementsByTagName("code"),e,f=[],g=[];for(e=0;e<c.length;++e)c[e].getElementsByTagName("code").length?c[e].innerHTML=c[e].innerHTML.replace(/^\s+/,
+    "").replace(/\s+$/,""):f.push(c[e]);for(e=0;e<d.length;++e)g.push(d[e]);o(g.concat(f),0,b)}var j={},f={},m={},y={},d=0,x=0,s=0,w=0,l,p;return{extend:function(a,b,c){1==arguments.length&&(b=a,a=x);y[a]=c;m[a]=b.concat(m[a]||[])},b:function(a){p=a},a:function(a){l=a},color:function(a,b,c){if("string"==typeof a)return n(a,b,c);if("function"==typeof a)return z(0,a);z(a,b)}}}();document.addEventListener&&document.addEventListener("DOMContentLoaded",Rainbow.color,!1);Rainbow.onHighlight=Rainbow.b;
+    Rainbow.addClass=Rainbow.a;Rainbow.extend([{matches:{1:[{name:"keyword.operator",pattern:/\=|\+/g},{name:"keyword.dot",pattern:/\./g}],2:{name:"string",matches:{name:"constant.character.escape",pattern:/\\('|"){1}/g}}},pattern:/(\(|\s|\[|\=|:|\+|\.)(('|")([^\\\1]|\\.)*?(\3))/gm},{name:"comment",pattern:/\/\*[\s\S]*?\*\/|(\/\/|\#)[\s\S]*?$/gm},{name:"constant.numeric",pattern:/\b(\d+(\.\d+)?(e(\+|\-)?\d+)?(f|d)?|0x[\da-f]+)\b/gi},{matches:{1:"keyword"},pattern:/\b(and|array|as|b(ool(ean)?|reak)|c(ase|atch|har|lass|on(st|tinue))|d(ef|elete|o(uble)?)|e(cho|lse(if)?|xit|xtends|xcept)|f(inally|loat|or(each)?|unction)|global|if|import|int(eger)?|long|new|object|or|pr(int|ivate|otected)|public|return|self|st(ring|ruct|atic)|switch|th(en|is|row)|try|(un)?signed|var|void|while)(?=\(|\b)/gi},
+    {name:"constant.language",pattern:/true|false|null/g},{name:"keyword.operator",pattern:/\+|\!|\-|&(gt|lt|amp);|\||\*|\=/g},{matches:{1:"function.call"},pattern:/(\w+?)(?=\()/g},{matches:{1:"storage.function",2:"entity.name.function"},pattern:/(function)\s(.*?)(?=\()/g}]);Rainbow.extend("python",[{name:"variable.self",pattern:/self/g},{name:"constant.language",pattern:/None|True|False|NotImplemented|\.\.\./g},{name:"support.object",pattern:/object/g},{name:"support.function.python",pattern:/\b(bs|divmod|input|open|staticmethod|all|enumerate|int|ord|str|any|eval|isinstance|pow|sum|basestring|execfile|issubclass|print|super|bin|file|iter|property|tuple|bool|filter|len|range|type|bytearray|float|list|raw_input|unichr|callable|format|locals|reduce|unicode|chr|frozenset|long|reload|vars|classmethod|getattr|map|repr|xrange|cmp|globals|max|reversed|zip|compile|hasattr|memoryview|round|__import__|complex|hash|min|set|apply|delattr|help|next|setattr|buffer|dict|hex|object|slice|coerce|dir|id|oct|sorted|intern)(?=\()/g},
+    {matches:{1:"keyword"},pattern:/\b(pass|lambda|with|is|not|in|from|elif|raise|del)(?=\(|\b)/g},{matches:{1:"storage.class",2:"entity.name.class",3:"entity.other.inherited-class"},pattern:/(class)\s+(\w+)\((\w+?)\)/g},{matches:{1:"storage.function",2:"support.magic"},pattern:/(def)\s+(__\w+)(?=\()/g},{name:"support.magic",pattern:/__(name)__/g},{matches:{1:"keyword.control",2:"support.exception.type"},pattern:/(except) (\w+):/g},{matches:{1:"storage.function",2:"entity.name.function"},pattern:/(def)\s+(\w+)(?=\()/g},
+    {name:"entity.name.function.decorator",pattern:/@([\w\.]+)/g},{name:"comment.docstring",pattern:/('{3}|"{3})[\s\S]*?\1/gm}]);
+  </script>
+</body>
 </html>
