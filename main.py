@@ -10,8 +10,8 @@ from Tkinter import *
 buf = cStringIO.StringIO()
 
 #settings
-client_id       = "e5rhsuzhcfrjlxdttowjlsmvrekzbdg5"
-client_secret   = "pfob33oxx7nvyoqntl4oafpzdpctakif"
+client_id       = {CLIENT_ID} # Replace this with your client id
+client_secret   = {CLIENT_SECRET} # Replace this with your client secret
 post_field_string = "client_id=" + client_id+ "&client_secret="+client_secret+"&grant_type=client_credentials&scope=SPEECH"
 
 #create pycurl object
@@ -75,7 +75,6 @@ class Demo(Frame):
         self.resultText.insert(END, "AT&T thought the 2nd person said: " + " ".join(result2) + "\n")
 
 if __name__ == "__main__":
-    file_name = "demo.wav"
     root = Tk()
     root.title("Garble Flarble Game")
 
